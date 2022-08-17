@@ -17,6 +17,7 @@
   For more information visit https://clydelettsome.com/blog/2020/06/07/my-weekend-project-musical-note-detector-using-an-arduino/
 
 */
+// max for esp32?
 #define SAMPLES 128             //Max 128 for Arduino Uno.
 #define SAMPLING_FREQUENCY 2048 //Fs = Based on Nyquist, must be 2 times the highest expected frequency.
 #define OFFSETSAMPLES 40  //used for calabrating purposes
@@ -53,12 +54,12 @@ void loop()
   //*****************************************************************
   //Calabration Section
   //*****************************************************************
-  Serial.println("Calabrating. Please do not play any notes during calabration.");
+  Serial.println(F("Calabrating. Please do not play any notes during calabration."));
   for (i = 0; i < OFFSETSAMPLES; i++)
   {
     offSet[i] = analogRead(0); //Reads the value from analog pin 0 (A0), quantize it and save it as a real term.
     //Serial.println(offSet[i]); //use this to adjust the sound detection module to approximately half or 512 when no sound is played.
-    sumOffSet = sumOffSet + offSet[i];
+    sumOffSet += offSet[i];
   }
   samplesPerPeriod = 0;
   maxValue = 0;
@@ -67,7 +68,7 @@ void loop()
   //Prepare to accept input from A0
   //*****************************************************************
   avgOffSet = round(sumOffSet / OFFSETSAMPLES);
-  Serial.println("Counting down.");
+  Serial.println(F("Counting down."));
   delay(1000);  //pause for 1 seconds
   Serial.println("3");
   delay(1000);  //pause for 1 seconds
@@ -75,7 +76,7 @@ void loop()
   delay(1000);  //pause for 1 
   Serial.println("1");
   delay(1000);  //pause for 1 seconds
-  Serial.println("Play your note!");
+  Serial.println(F("Play your note!"));
   delay(250);  //pause for 1/4 second for reaction time
 
   //*****************************************************************
@@ -91,6 +92,7 @@ void loop()
     while (micros() < (microSeconds + (samplingPeriod * 1000000)))
     {
       //do nothing just wait
+      yield(); // for ESP
     }
   }
 
@@ -103,7 +105,7 @@ void loop()
     sum = 0;
     for (k = 0; k < SAMPLES - i; k++) //Match signal with delayed signal
     {
-      sum = sum + (((X[k]) - avgOffSet) * ((X[k + i]) - avgOffSet)); //X[k] is the signal and X[k+i] is the delayed version
+      sum += (X[k] - avgOffSet) * (X[k + i] - avgOffSet); //X[k] is the signal and X[k+i] is the delayed version
     }
     autoCorr[i] = sum / SAMPLES;
 
@@ -116,9 +118,9 @@ void loop()
     else if (state_machine == 1 && i>0 && thresh < autoCorr[i] && (autoCorr[i]-autoCorr[i-1])>0) //state_machine=1, find 1 period for using first cycle
     {
       maxValue = autoCorr[i];
-      
     }
-    else if (state_machine == 1&& i>0 && thresh < autoCorr[i-1] && maxValue == autoCorr[i-1] && (autoCorr[i]-autoCorr[i-1])<=0)
+    //ToDo: creat fnc for staze 1-3
+    else if (state_machine == 1 && i>0 && thresh < autoCorr[i-1] && maxValue == autoCorr[i-1] && (autoCorr[i]-autoCorr[i-1])<=0)
     {
       periodBegin = i-1;
       state_machine = 2;
@@ -132,7 +134,7 @@ void loop()
     {
       maxValue = autoCorr[i];
     }
-    else if (state_machine == 2&& i>0 && thresh < autoCorr[i-1] && maxValue == autoCorr[i-1] && (autoCorr[i]-autoCorr[i-1])<=0)
+    else if (state_machine == 2 && i>0 && thresh < autoCorr[i-1] && maxValue == autoCorr[i-1] && (autoCorr[i]-autoCorr[i-1])<=0)
     {
       periodEnd = i-1;
       state_machine = 3;
@@ -150,7 +152,7 @@ void loop()
       periodEnd = i-1;
       state_machine = 4;
       numOfCycles = 3;
-      samplesPerPeriod = (periodEnd - 0);
+      samplesPerPeriod = periodEnd;
       signalFrequency3 = ((numOfCycles*SAMPLING_FREQUENCY) / (samplesPerPeriod))-adjuster; // f = (3*fs)/(3*N)
     }
   }
@@ -160,10 +162,10 @@ void loop()
   //*****************************************************************
   if (samplesPerPeriod == 0)
   {
-    Serial.println("Hmm..... I am not sure. Are you trying to trick me?");
+    Serial.println(F("Hmm..... I am not sure. Are you trying to trick me?"));
   }
   else
-  { 
+  {
     //prepare the weighting function
     total = 0;
     if (signalFrequency !=0)
@@ -172,18 +174,18 @@ void loop()
     }
     if(signalFrequency2 !=0)
     {
-      total = total + 2;
+      total += 2;
     }
     if (signalFrequency3 !=0)
     {
-      total = total + 3;
+      total += 3;
     }
 
     //calculate the frequency using the weighting function
     signalFrequencyGuess = ((1/total) * signalFrequency) + ((2/total) * signalFrequency2) + ((3/total) * signalFrequency3); //find a weighted frequency
-    Serial.print("The note you played is approximately ");
+    Serial.print(F("The note you played is approximately "));
     Serial.print(signalFrequencyGuess);     //Print the frequency guess.
-    Serial.println(" Hz.");
+    Serial.println(F(" Hz."));
 
     //find octave range based on the guess
     octaveRange=3;
@@ -191,7 +193,7 @@ void loop()
     {
       for(i = 0; i < 12; i++)
       {
-        storedNoteFreq[i] = 2 * storedNoteFreq[i];
+        storedNoteFreq[i] *= 2;
       }
       octaveRange++;
     }
@@ -209,59 +211,50 @@ void loop()
     }
     
     //Print the note
-    Serial.print("I think you played ");
-    if(noteLocation==0)
-    { 
-      Serial.print("C");
-    }  
-    else if(noteLocation==1)
-    {
-      Serial.print("C#");
+    Serial.print(F("I think you played "));
+    switch (noteLocation) {
+      case 0: Serial.print("C");
+      break;
+
+      case 1: Serial.print("C#");
+      break;
+
+      case 2: Serial.print("D");
+      break;
+
+      case 3: Serial.print("D#");
+      break;
+
+      case 4: Serial.print("E");
+      break;
+
+      case 5: Serial.print("F");
+      break;
+
+      case 6: Serial.print("F#");
+      break;
+
+      case 7: Serial.print("G");
+      break;
+
+      case 8: Serial.print("G#");
+      break;
+
+      case 9: Serial.print("A");
+      break;
+
+      case 10: Serial.print("A#");
+      break;
+
+      case 11: Serial.print("B");
+      break;
     }
-    else if(noteLocation==2)
-    {
-      Serial.print("D");
-    }
-    else if(noteLocation==3)
-    {
-      Serial.print("D#");
-    }
-    else if(noteLocation==4)
-    {
-      Serial.print("E");
-    }
-    else if(noteLocation==5)
-    {
-      Serial.print("F");
-    }
-    else if(noteLocation==6)
-    {
-      Serial.print("F#");
-    }
-    else if(noteLocation==7)
-    {
-      Serial.print("G");
-    }
-    else if(noteLocation==8)
-    {
-      Serial.print("G#");
-    }
-    else if(noteLocation==9)
-    {
-      Serial.print("A");
-    }
-    else if(noteLocation==10)
-    {
-      Serial.print("A#");
-    }
-    else if(noteLocation==11)
-    {
-      Serial.print("B");
-    }
+
     Serial.println(octaveRange);
   }
   //*****************************************************************
   //Stop here. Hit reset button on Arduino to restart
-  //*****************************************************************
-  while (1);
+  //*****************************************************************  
+  //while (1);
+  delay(1000);
 }
