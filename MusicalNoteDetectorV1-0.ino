@@ -119,7 +119,7 @@ void loop()
     {
       maxValue = autoCorr[i];
     }
-    //ToDo: creat fnc for staze 1-3
+    //ToDo: create fnc for state 1-3
     else if (state_machine == 1 && i>0 && thresh < autoCorr[i-1] && maxValue == autoCorr[i-1] && (autoCorr[i]-autoCorr[i-1])<=0)
     {
       periodBegin = i-1;
